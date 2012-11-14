@@ -20,5 +20,26 @@
 package uk.co.swlines.cifreader.cif.data;
 
 public class CIFLocationIntermediate extends CIFLocation {
+	public CIFLocationIntermediate(String record) {
+		super(record);
+		
+		arrival = record.substring(10, 15).trim();
+		departure = record.substring(15, 20).trim();
+		pass = record.substring(20, 25).trim();
+		
+		public_arrival = record.substring(25, 29).trim();
+		public_departure = record.substring(29, 33).trim();
+		
+		platform = record.substring(33, 36).trim();
+		line = record.substring(36, 39).trim();
+		path = record.substring(39, 42).trim();
+		
+		allowance_engineering = record.substring(54, 56).trim();
+		allowance_pathing = record.substring(56, 58).trim();
+		allowance_performance = record.substring(58, 60).trim();
+		
+		computeActivity(record.substring(42, 54));
+	}
+
 	private String arrival, public_arrival, departure, public_departure, pass, line, path, allowance_engineering, allowance_pathing, allowance_performance;
 }

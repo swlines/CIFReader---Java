@@ -20,5 +20,19 @@
 package uk.co.swlines.cifreader.cif.data;
 
 public class CIFLocationTerminus extends CIFLocation {
-	private String arrival, public_arrival, pass, path;
+	public CIFLocationTerminus(String record) {
+		super(record);
+		
+		arrival = record.substring(10, 15).trim();
+		public_arrival = record.substring(15, 19).trim();
+		
+		platform = record.substring(19, 22).trim();
+		path = record.substring(22, 25).trim();
+		
+		computeActivity(record.substring(25, 37));
+	}
+
+	private String arrival, public_arrival, platform, path;
+	
+	
 }
