@@ -4,6 +4,7 @@ public final class CIFUtils {
 	public static final String convertDate(String date) {
 		// edge case
 		if(date.equals("999999")) return "9999-99-99";
+		else if(date.trim().equals("")) return null;
 		
 		String returnData = "";
 		

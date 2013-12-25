@@ -27,7 +27,7 @@ public class CIFLocationOrigin extends CIFLocation implements CIFLocationDepart 
 		this.departure = departure.length() == 0 ? null : Integer.valueOf(departure.substring(0, 4) + (departure.length() == 4 ?  "00" : "30"));
 		
 		String public_departure = record.substring(15, 19).trim();
-		this.public_departure = public_departure.length() == 0 ? null : Integer.valueOf(public_departure);
+		this.public_departure = public_departure.length() == 0 || public_departure.equals("0000") ? null : Integer.valueOf(public_departure);
 		
 		platform = record.substring(19, 22).trim();
 		line = record.substring(22, 25).trim();
@@ -43,7 +43,7 @@ public class CIFLocationOrigin extends CIFLocation implements CIFLocationDepart 
 				
 		computeActivity(record.substring(29, 41));
 		
-		public_call = !ac_n && public_departure != null;
+		public_call = !(ac_n || this.public_departure == null);
 		actual_call = true;
 	}
 

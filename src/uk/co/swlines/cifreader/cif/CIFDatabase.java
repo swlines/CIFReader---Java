@@ -24,7 +24,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.List;
 
+import uk.co.swlines.cifreader.CIFReader;
 import uk.co.swlines.cifreader.DatabaseMySQL;
 import uk.co.swlines.cifreader.cif.data.CIFAssociation;
 import uk.co.swlines.cifreader.cif.data.CIFLocation;
@@ -42,15 +44,18 @@ import org.apache.commons.configuration.XMLConfiguration;
 public class CIFDatabase extends DatabaseMySQL {
 	
 	public CIFDatabase() throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, ConfigurationException {
-		XMLConfiguration configuration = new XMLConfiguration("resources/configuration.xml");
-
-		createConnection(String.format("jdbc:mariadb://%s:%s/%s", configuration.getString("database.url"), 
-				configuration.getString("database.port"), configuration.getString("database.database")), 
+		XMLConfiguration configuration = null;
+		
+		configuration = new XMLConfiguration(!CIFReader.inDevelopmentEnviroment() ? "cifreader_config.xml" : "src/resources/configuration.xml");		
+		
+		createConnection(String.format("jdbc:mysql://%s/%s", configuration.getString("database.url"), 
+				configuration.getString("database.database")), 
 				configuration.getString("database.username"), configuration.getString("database.password"));
 	}
 	
-	public void createTemporaryTables() throws SQLException {
+	public void createTemporaryTables(boolean truncate) throws SQLException {
 		Statement query = getConnection().createStatement();
+
 		query.execute("DROP TABLE IF EXISTS associations_old, associations_stpcancel_old, associations_stpcancel_core_old, "
 				+ "locations_old, locations_change_old, schedules_old, schedules_stpcancel_old, schedules_stpcancel_core_old, "
 				+ "tiplocs_old, schedules_cache_old, tiplocs_cache_old, associations_t, associations_stpcancel_t, "
@@ -60,7 +65,6 @@ public class CIFDatabase extends DatabaseMySQL {
 		query.execute("CREATE TABLE associations_t LIKE associations");
 		query.execute("CREATE TABLE associations_stpcancel_t LIKE associations_stpcancel");
 		query.execute("CREATE TABLE associations_stpcancel_core_t LIKE associations_stpcancel_core");
-		query.execute("CREATE TABLE locations_t LIKE locations");
 		query.execute("CREATE TABLE locations_change_t LIKE locations_change");
 		query.execute("CREATE TABLE schedules_t LIKE schedules");
 		query.execute("CREATE TABLE schedules_stpcancel_t LIKE schedules_stpcancel");
@@ -68,21 +72,56 @@ public class CIFDatabase extends DatabaseMySQL {
 		query.execute("CREATE TABLE tiplocs_t LIKE tiplocs");
 		query.execute("CREATE TABLE tiplocs_cache_t LIKE tiplocs_cache");
 		query.execute("CREATE TABLE schedules_cache_t LIKE schedules_cache");
+		
+		query.execute("CREATE TABLE locations_t LIKE locations");
+		query.execute("ALTER TABLE locations_t DROP INDEX `location_type`, DROP INDEX `tiploc_code`, DROP INDEX `order_time`,DROP INDEX `public_call`, DROP INDEX `actual_call`");
+		
+		if (!truncate) {			
+			query.execute("INSERT INTO locations_t SELECT * FROM locations");
+            query.execute("INSERT INTO associations_t SELECT * FROM associations");
+            query.execute("INSERT INTO associations_stpcancel_core_t SELECT * FROM associations_stpcancel_core");
+            query.execute("INSERT INTO locations_change_t SELECT * FROM locations_change");
+            query.execute("INSERT INTO schedules_t SELECT * FROM schedules");
+            query.execute("INSERT INTO schedules_stpcancel_core_t SELECT * FROM schedules_stpcancel_core");
+            query.execute("INSERT INTO tiplocs_t SELECT * FROM tiplocs");
+		}
 	}
 	
 	public void disableKeys() throws SQLException {
 		Statement query = getConnection().createStatement();
+
 		query.execute("ALTER TABLE associations_t DISABLE KEYS");
-		query.execute("ALTER TABLE associations_stpcancel_t DISABLE KEYS");
 		query.execute("ALTER TABLE associations_stpcancel_core_t DISABLE KEYS");
 		query.execute("ALTER TABLE locations_t DISABLE KEYS");
 		query.execute("ALTER TABLE locations_change_t DISABLE KEYS");
 		query.execute("ALTER TABLE schedules_t DISABLE KEYS");
-		query.execute("ALTER TABLE schedules_stpcancel_t DISABLE KEYS");
 		query.execute("ALTER TABLE schedules_stpcancel_core_t DISABLE KEYS");
 		query.execute("ALTER TABLE tiplocs_t DISABLE KEYS");
-		query.execute("ALTER TABLE tiplocs_cache_t DISABLE KEYS");
-		query.execute("ALTER TABLE schedules_cache_t DISABLE KEYS");
+	}
+	
+	public void enableKeys() throws SQLException {
+		Statement query = getConnection().createStatement();
+
+		query.execute("ALTER TABLE associations_t ENABLE KEYS");
+		query.execute("ALTER TABLE associations_stpcancel_core_t ENABLE KEYS");
+		query.execute("ALTER TABLE locations_t ENABLE KEYS");
+		query.execute("ALTER TABLE locations_change_t ENABLE KEYS");
+		query.execute("ALTER TABLE schedules_t ENABLE KEYS");
+		query.execute("ALTER TABLE schedules_stpcancel_core_t ENABLE KEYS");
+		query.execute("ALTER TABLE tiplocs_t ENABLE KEYS");
+	}
+	
+	public void finalise() throws SQLException {
+		Statement query = getConnection().createStatement();
+		
+		query.execute("ALTER TABLE locations_t ADD INDEX (`location_type`), ADD INDEX (`tiploc_code`), ADD INDEX (`order_time`), ADD INDEX  (`public_call`), ADD INDEX (`actual_call`)");
+		
+		query.execute("insert into schedules_stpcancel_t select s.id as id, ssc.cancel_from, ssc.cancel_to, ssc.cancel_mo, ssc.cancel_tu, ssc.cancel_we, ssc.cancel_th, ssc.cancel_fr, ssc.cancel_sa, ssc.cancel_su from schedules_stpcancel_core_t ssc left join schedules_t s on s.train_uid = ssc.train_uid and s.stp_indicator = 'P' and ssc.cancel_to >= s.date_from");
+        query.execute("insert into associations_stpcancel_t select a.id as id, asc.cancel_from, asc.cancel_to, asc.cancel_mo, asc.cancel_tu, asc.cancel_we, asc.cancel_th, asc.cancel_fr, asc.cancel_sa, asc.cancel_su from associations_stpcancel_core_t as `asc` left join associations_t a on a.main_train_uid = asc.main_train_uid and a.assoc_train_uid = asc.assoc_train_uid and a.location = asc.location and a.stp_indicator = 'P' and asc.cancel_to >= a.date_from");
+        query.execute("INSERT INTO schedules_cache_t SELECT l1.id, l1.tiploc_code as origin, l1.departure as departure, l1.public_departure as public_origin, l2.tiploc_code as destination, l2.arrival as destination_time, l2.public_arrival as public_destination FROM locations_t l1 LEFT JOIN locations_t l2 ON l1.id = l2.id AND l2.location_type = 'LT' WHERE l1.location_type = 'LO'");
+        query.execute("INSERT INTO tiplocs_cache_t SELECT s.tiploc, t.nalco, s.description, t.stanox, s.crs, t.description FROM stations s LEFT JOIN tiplocs_t t ON s.tiploc = t.tiploc UNION SELECT la.additional_tiploc, t.nalco, s.description, t.stanox, s.crs, t.description FROM stations s INNER JOIN locations_alternatives la ON s.tiploc = la.tiploc LEFT JOIN tiplocs_t t ON s.tiploc = t.tiploc UNION SELECT t.* FROM tiplocs_t t LEFT JOIN stations s ON t.tiploc = s.tiploc LEFT JOIN locations_alternatives la ON t.tiploc = la.additional_tiploc WHERE la.tiploc IS NULL AND s.tiploc IS NULL ORDER BY tiploc ASC");
+
+        query.execute("RENAME TABLE associations TO associations_old, associations_t TO associations, associations_stpcancel TO associations_stpcancel_old, associations_stpcancel_t TO associations_stpcancel, associations_stpcancel_core TO associations_stpcancel_core_old, associations_stpcancel_core_t TO associations_stpcancel_core, locations_change TO locations_change_old, locations_change_t TO locations_change, schedules TO schedules_old, schedules_t TO schedules, schedules_stpcancel TO schedules_stpcancel_old, schedules_stpcancel_t TO schedules_stpcancel, schedules_stpcancel_core TO schedules_stpcancel_core_old, schedules_stpcancel_core_t TO schedules_stpcancel_core, tiplocs TO tiplocs_old, tiplocs_t TO tiplocs, locations TO locations_old, locations_t TO locations, schedules_cache TO schedules_cache_old, schedules_cache_t TO schedules_cache, tiplocs_cache TO tiplocs_cache_old, tiplocs_cache_t TO tiplocs_cache");
 	}
 	
 	public void deleteTiploc(String tiploc) {
@@ -183,8 +222,10 @@ public class CIFDatabase extends DatabaseMySQL {
 	}
 	
 	public void insertAssociationBulk(ArrayList<CIFAssociation> associationInsert) {
+		if(associationInsert.size() == 0) return; 
+		
 		try {			
-			PreparedStatement stmt = getConnection().prepareStatement(new StringBuilder("INSERT INTO associations_stpcancel (main_train_uid, assoc_train_uid, " +
+			PreparedStatement stmt = getConnection().prepareStatement(new StringBuilder("INSERT INTO associations_t (main_train_uid, assoc_train_uid, " +
 					"date_from, date_to, runs_mo, runs_tu, runs_we, runs_th, runs_fr, runs_sa, runs_su, category, date_indicator, " +
 					"location, base_location_suffix, assoc_location_suffix, assoc_type, stp_indicator) VALUES ").append(createInsertPlaceholdersList(associationInsert.size(), 18)).toString());
 			
@@ -219,13 +260,14 @@ public class CIFDatabase extends DatabaseMySQL {
 			
 		} catch(SQLException e) {
 			e.printStackTrace();
+			System.exit(1);
 		}
 	}
 	
 	public void deleteScheduleSTPCancellation(CIFSchedule r) {
 		try {
 			PreparedStatement stmt = getConnection().prepareStatement("DELETE FROM schedules_stpcancel_core_t WHERE " +
-					"train_uid = ? AND date_from = ?");
+					"train_uid = ? AND cancel_from = ?");
 			stmt.setString(1, r.getUid());
 			stmt.setString(2, r.getDate_from());
 			
@@ -279,6 +321,9 @@ public class CIFDatabase extends DatabaseMySQL {
 	}
 	
 	public void insertScheduleBulk(ArrayList<CIFSchedule> r) throws LogicException {
+		
+		if(r.size() == 0) return;
+		
 		try {			
 			final StringBuilder schedulesStatement = new StringBuilder("INSERT INTO schedules_t (train_uid, date_from, date_to," +
 					"runs_mo, runs_tu, runs_we, runs_th, runs_fr, runs_sa, runs_su, bank_hol, status, category, train_identity, headcode, " +
@@ -290,16 +335,20 @@ public class CIFDatabase extends DatabaseMySQL {
 					"tiploc_code, tiploc_instance, arrival, arrival_aftermidnight, public_arrival, public_arrival_aftermidnight, " +
 					"pass, pass_aftermidnight, departure, departure_aftermidnight, public_departure, public_departure_aftermidnight, " +
 					"platform, line, path, engineering_allowance, pathing_allowance, performance_allowance, public_call, " +
-					"actual_call, act_a, act_ae, act_bl, act_c, act_d, act_minusd, act_e, act_g, act_h, act_hh, act_k, act_kc, " +
+					"actual_call, order_time, public_time, act_a, act_ae, act_bl, act_c, act_d, act_minusd, act_e, act_g, act_h, act_hh, act_k, act_kc, " +
 					"act_ke, act_kf, act_ks, act_l, act_n, act_op, act_or, act_pr, act_r, act_rm, act_rr, act_s, act_t, act_minust, act_tb, " +
 					"act_tf, act_ts, act_tw, act_u, act_minusu, act_w, act_x) VALUES ");
 			
-			PreparedStatement stmtSchedules = getConnection().prepareStatement(schedulesStatement.append(createInsertPlaceholdersList(r.size(), 46)).
+			PreparedStatement stmtSchedules = getConnection().prepareStatement(schedulesStatement.append(createInsertPlaceholders(46)).
 					toString(), Statement.RETURN_GENERATED_KEYS);
 			
-			int parameterIndex = 1, locationTotal = 0;
+			int locationTotal = 0;
 			
 			for(CIFSchedule schedule : r) {
+				int parameterIndex = 1;
+						
+				stmtSchedules.clearParameters();
+				
 				stmtSchedules.setString(parameterIndex++, schedule.getUid());
 				
 				stmtSchedules.setString(parameterIndex++, schedule.getDate_from());
@@ -373,25 +422,24 @@ public class CIFDatabase extends DatabaseMySQL {
 				stmtSchedules.setBoolean(parameterIndex++, schedule.isOc_y());
 				stmtSchedules.setBoolean(parameterIndex++, schedule.isOc_z());
 				
+				stmtSchedules.execute();
+				
 				locationTotal += schedule.getLocations().size();
+				
+				ResultSet rs = stmtSchedules.getGeneratedKeys();
+				
+				while(rs.next()) {
+					schedule.setDatabaseId(rs.getInt(1));
+				}
+				
+				rs.close();
 			}			
-			stmtSchedules.execute();
 			
-			ResultSet rs = stmtSchedules.getGeneratedKeys();
-			
-			int scheduleTracker = 0;
-			while(rs.next()) {
-				r.get(scheduleTracker++).setDatabaseId(rs.getInt(1));
-			}
-			
-			rs.close();
 			stmtSchedules.close();
-			
-			parameterIndex = 1;
-			
 
 			
-			PreparedStatement stmtLocations = getConnection().prepareStatement(locationsStatement.append(createInsertPlaceholdersList(locationTotal, 57)).
+			int parameterIndex = 1;
+			PreparedStatement stmtLocations = getConnection().prepareStatement(locationsStatement.append(createInsertPlaceholdersList(locationTotal, 59)).
 					toString());
 			
 			for(CIFSchedule schedule : r) {
@@ -412,22 +460,28 @@ public class CIFDatabase extends DatabaseMySQL {
 					stmtLocations.setString(parameterIndex++, location.getLocationType());
 					stmtLocations.setString(parameterIndex++, location.getTiploc());
 					stmtLocations.setString(parameterIndex++, String.valueOf(location.getTiploc_instance()).trim());
-										
+					
+					Integer orderTime = null;
+					Integer publicTime = null;
+					
 					if(location instanceof CIFLocationArrival && ((CIFLocationArrival) location).getArrival() != null) {
 						CIFLocationArrival locationArrival = (CIFLocationArrival) location;
 						
 						stmtLocations.setInt(parameterIndex++, locationArrival.getArrival());
 						stmtLocations.setBoolean(parameterIndex++, locationArrival.getArrival() < originDeparture);
 						
+						orderTime = locationArrival.getArrival();
+						
 						if(locationArrival.getPublic_arrival() != null) {
 							stmtLocations.setInt(parameterIndex++, locationArrival.getPublic_arrival());
-							stmtLocations.setBoolean(parameterIndex++, originPublicDeparture != null && locationArrival.getPublic_arrival() < originPublicDeparture);
+							stmtLocations.setBoolean(parameterIndex++, originPublicDeparture != null ? locationArrival.getPublic_arrival() < originPublicDeparture : null);
+							
+							publicTime = locationArrival.getPublic_arrival();
 						}
 						else {
 							stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
-							stmtLocations.setBoolean(parameterIndex++, false);
+							stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
 						}
-						
 					}
 					else {
 						stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
@@ -441,6 +495,8 @@ public class CIFDatabase extends DatabaseMySQL {
 						
 						stmtLocations.setInt(parameterIndex++, locationIntermediate.getPass());
 						stmtLocations.setBoolean(parameterIndex++, locationIntermediate.getPass() < originDeparture);
+						
+						orderTime = locationIntermediate.getPass();
 					}
 					else {
 						stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
@@ -453,15 +509,18 @@ public class CIFDatabase extends DatabaseMySQL {
 						stmtLocations.setInt(parameterIndex++, locationDeparture.getDeparture());
 						stmtLocations.setBoolean(parameterIndex++, locationDeparture.getDeparture() < originDeparture);
 						
+						orderTime = locationDeparture.getDeparture();
+						
 						if(locationDeparture.getPublic_departure() != null) {
 							stmtLocations.setInt(parameterIndex++, locationDeparture.getPublic_departure());
-							stmtLocations.setBoolean(parameterIndex++, originPublicDeparture != null && locationDeparture.getPublic_departure() < originPublicDeparture);
+							stmtLocations.setBoolean(parameterIndex++, originPublicDeparture != null ? locationDeparture.getPublic_departure() < originPublicDeparture : null);
+							
+							publicTime = locationDeparture.getPublic_departure();
 						}
 						else {
 							stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
-							stmtLocations.setBoolean(parameterIndex++, false);
+							stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
 						}
-						
 					}
 					else {
 						stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
@@ -500,6 +559,13 @@ public class CIFDatabase extends DatabaseMySQL {
 					
 					stmtLocations.setBoolean(parameterIndex++, location.isPublic_call());
 					stmtLocations.setBoolean(parameterIndex++, location.isActual_call());
+					
+//					stmtLocations.setInt(parameterIndex++, location.isActual_call() ? ( ? : ) : ((CIFLocationIntermediate) location).getPass());
+					stmtLocations.setInt(parameterIndex++, orderTime);
+					if(publicTime != null)
+						stmtLocations.setInt(parameterIndex++, publicTime);
+					else
+						stmtLocations.setNull(parameterIndex++, java.sql.Types.INTEGER);
 					
 					stmtLocations.setBoolean(parameterIndex++, location.isAc_a());
 					stmtLocations.setBoolean(parameterIndex++, location.isAc_ae());

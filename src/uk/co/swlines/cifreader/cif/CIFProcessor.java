@@ -25,6 +25,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.commons.configuration.ConfigurationException;
 
@@ -42,45 +43,87 @@ public class CIFProcessor {
 	private ArrayList<CIFAssociation> associationsInsert = null;
 	private ArrayList<CIFAssociation> associationsDelete = null;
 	
+	private List<String> filePaths = null;
+	boolean fullExtractToLoad = false;
+	
 	public CIFProcessor() {
+		
+	}
+	
+	public void processFile(String filePath) throws CIFFileException, FileNotFoundException {
+		if(filePaths == null) filePaths = new ArrayList<String>();
+		
+		BufferedReader in = new BufferedReader(new FileReader(filePath));
+		String line;
 		try {
-			database = new CIFDatabase();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (InstantiationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IllegalAccessException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ConfigurationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			line = in.readLine();
+			if(line == null || !line.substring(0, 2).equals("HD")) throw new CIFFileException();
+			
+			CIFHeader header = new CIFHeader(line);
+			if(header.isFullExtract()) {
+				fullExtractToLoad = true;
+				filePaths.clear();
+			}
+		} catch (IOException e) {
+			throw new CIFFileException();
 		}
 		
-		try {
-			database.createTemporaryTables();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		try {
-			database.disableKeys();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		filePaths.add(filePath);
+	}
+	
+	public void process() {
+		if(filePaths != null) {
+			try {
+				database = new CIFDatabase();
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (InstantiationException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IllegalAccessException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (ConfigurationException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			if(database == null) {
+				System.err.println("No database connection could be made.");
+				System.exit(1);
+			}
+			
+			try {
+				database.createTemporaryTables(fullExtractToLoad);
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return;
+			}
+			
+			for(String filePath : filePaths) {
+				process(filePath);
+			}
+			
+			try {
+				database.finalise();
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return;
+			}
 		}
 	}
 	
-	public void readFile(String filepath) throws CIFFileException {
+	private void process(String filepath) {
 		BufferedReader in = null;
 		
 		File file = new File(filepath);
-		int fileSize = (int) (file.length() / (1024 * 1000));
+		long fileSize = file.length();
 		
 		try {
 			in = new BufferedReader(new FileReader(filepath));
@@ -99,20 +142,34 @@ public class CIFProcessor {
 		
 		associationsInsert = new ArrayList<CIFAssociation>();
 		associationsDelete = new ArrayList<CIFAssociation>();
+		long bytesProgress = 0;
 		
 		try {
 			// get the header
 			line = in.readLine();
-			if(line == null || !line.substring(0, 2).equals("HD")) throw new CIFFileException();
-			else header = new CIFHeader(line);
+			bytesProgress += line.getBytes().length +2;
+			
+			header = new CIFHeader(line);
 			
 			System.out.println("===========================================================\n" +
 					"Network Rail CIF: "+ filepath + "\n" +
 					"Importing " + header.getFile_ref() + " created for " + header.getUser_identity() +"\n" +
 					"Generated on "+ header.getExtract_date() + " at "+ header.getExtract_time() +"\n" +
 					"Data window is "+ header.getUser_extract_start_date() + " to " + header.getUser_extract_end_date() +"\n" +
-					"File is "+ ((header.isFullExtract()) ? "FULL EXTRACT" : "UPDATE") +", size: " + fileSize + "MiB\n" +
+					"File is "+ ((header.isFullExtract()) ? "FULL EXTRACT" : "UPDATE") +", size: " + (fileSize / (1024 * 1000)) + "MiB\n" +
 							"===========================================================\n");
+			
+			if(header.isFullExtract()) {
+				System.out.println("Full Extract: Disabling keys");
+				try {
+					database.disableKeys();
+				} catch (SQLException e) {
+					e.printStackTrace();
+					return;
+				}
+			}
+			
+			
 			
 			CIFLocationEnRouteChange location_change = null;
 			
@@ -120,7 +177,20 @@ public class CIFProcessor {
 			// just create some stuff in case we need it later
 			schedule = null; 
 			
+			System.out.println("0%                       50%                      100%");
 			while((line = in.readLine()) != null) {
+				bytesProgress += line.getBytes().length +2;
+				
+				StringBuilder sb = new StringBuilder("|");
+				
+				int percentageComplete = (int) (((double) bytesProgress / (double) fileSize) * 50);
+				for(int i = 0; i < 50; i++) {
+					sb.append(i < percentageComplete ? "*" : "-");
+				}
+				sb.append("|");
+				System.out.print("\r"+ sb.toString());
+				
+						
 				recordType = line.substring(0, 2);
 				
 				if(recordType.equals("TI") || recordType.equals("TA")) {
@@ -172,6 +242,7 @@ public class CIFProcessor {
 					if(schedule.getStp_indicator() != 'C') {
 						// move forward and grab the BX
 						line = in.readLine();
+						bytesProgress += line.getBytes().length +2;
 						
 						schedule.parseBXRecord(line);
 					}
@@ -197,12 +268,26 @@ public class CIFProcessor {
 					location_change = new CIFLocationEnRouteChange(line);
 				}
 				else if(recordType.equals("ZZ")) break; // complete
-				else throw new CIFFileException();
 				
 				if(schedule == null) {
-					if(schedulesInsert.size() > 300)
+					if(schedulesInsert.size() > 50 || schedulesDelete.size() > 1000)
 						processSchedules();
-						
+					
+					if(associationsInsert.size() > 1000 || associationsDelete.size() > 1000)
+						processAssociations();
+				}
+			}
+			
+			processAssociations();
+			processSchedules();
+			
+			if(header.isFullExtract()) {
+				System.out.println("\nFull Extract: Enabling keys");
+				try {
+					database.enableKeys();
+				} catch (SQLException e) {
+					e.printStackTrace();
+					return;
 				}
 			}
 		} catch (IOException e) {

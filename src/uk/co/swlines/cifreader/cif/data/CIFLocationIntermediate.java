@@ -35,10 +35,10 @@ public class CIFLocationIntermediate extends CIFLocation implements CIFLocationA
 		this.pass = pass.length() == 0 ? null : Integer.valueOf(pass.substring(0, 4) + (pass.length() == 4 ?  "00" : "30"));
 		
 		String public_arrival = record.substring(25, 29).trim();
-		this.public_arrival = public_arrival.length() == 0 ? null : Integer.valueOf(public_arrival);
+		this.public_arrival = public_arrival.length() == 0 || public_arrival.equals("0000") ? null : Integer.valueOf(public_arrival);
 		
 		String public_departure = record.substring(29, 33).trim();
-		this.public_departure = public_departure.length() == 0 ? null : Integer.valueOf(public_departure);
+		this.public_departure = public_departure.length() == 0 || public_departure.equals("0000") ? null : Integer.valueOf(public_departure);
 		
 		platform = record.substring(33, 36).trim();
 		line = record.substring(36, 39).trim();
@@ -55,8 +55,8 @@ public class CIFLocationIntermediate extends CIFLocation implements CIFLocationA
 		
 		computeActivity(record.substring(42, 54));
 		
-		public_call = !ac_n && (public_arrival != null || public_departure != null);
-		actual_call = arrival != null || departure != null;
+		public_call = !ac_n && (this.public_arrival != null || this.public_departure != null);
+		actual_call = this.arrival != null || this.departure != null;
 	}
 	
 	public CIFLocationIntermediate(String record, CIFLocationEnRouteChange change_record) {

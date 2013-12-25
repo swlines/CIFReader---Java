@@ -20,6 +20,7 @@
 package uk.co.swlines.cifreader;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -31,19 +32,25 @@ import uk.co.swlines.cifreader.cif.data.CIFSchedule;
 public class CIFReader {
 	
 	public static void main(String[] args) {
-		//CIFSchedule schedule = new CIFSchedule("BSNY363901302101302100000001 PXX1Y48    121865000 DMUE   090      S            O");
-		//schedule.parseBXRecord("BX         NTY                                                                  ");
+		System.out.println("CIF Reader - Copyright 2013 Tom Cairns\n"
+				+ "This program comes with ABSOLUTELY NO WARRANTY. This is free software and you are "
+				+ "welcome to redistribute it under certain conditions, see LICENCE.");
 		
 		CIFProcessor processor = new CIFProcessor();
 		try {
-			processor.readFile("src/resources/CFTCRSY.CIF");
+			processor.processFile(!CIFReader.inDevelopmentEnviroment() ? "CFTCRSY.CIF" : "src/resources/CFTCRSY.CIF");
+			processor.process();
 		} catch (CIFFileException e) {
+			e.printStackTrace();
+		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
+	
+	public static boolean inDevelopmentEnviroment() {
+		String inEclipse = System.getProperty("ineclipse");
 		
-
-	
-	
+		return inEclipse != null && inEclipse.equals("1");
 	}
 }

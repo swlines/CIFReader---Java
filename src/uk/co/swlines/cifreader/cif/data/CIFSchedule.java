@@ -48,7 +48,7 @@ public class CIFSchedule {
 		uid = line.substring(3, 9).trim();
 		date_from = CIFUtils.convertDate(line.substring(9, 15).trim());
 		date_to = CIFUtils.convertDate(line.substring(15, 21).trim());
-		String runs = line.substring(21, 28).trim();
+		String runs = line.substring(21, 28);
 		bank_holiday = line.charAt(28);
 		status = line.charAt(29);
 		category = line.substring(30, 32).trim();

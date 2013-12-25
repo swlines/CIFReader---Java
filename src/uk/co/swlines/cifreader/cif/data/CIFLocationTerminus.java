@@ -27,14 +27,14 @@ public class CIFLocationTerminus extends CIFLocation implements CIFLocationArriv
 		this.arrival = arrival.length() == 0 ? null : Integer.valueOf(arrival.substring(0, 4) + (arrival.length() == 4 ?  "00" : "30"));
 		
 		String public_arrival = record.substring(15, 19).trim();
-		this.public_arrival = public_arrival.length() == 0 ? null : Integer.valueOf(public_arrival);
+		this.public_arrival = public_arrival.length() == 0 || public_arrival.equals("0000") ? null : Integer.valueOf(public_arrival);
 		
 		platform = record.substring(19, 22).trim();
 		path = record.substring(22, 25).trim();
 		
 		computeActivity(record.substring(25, 37));
 		
-		public_call = !(ac_n || public_arrival.equals(""));
+		public_call = !(ac_n || this.public_arrival == null);
 		actual_call = true;
 	}
 

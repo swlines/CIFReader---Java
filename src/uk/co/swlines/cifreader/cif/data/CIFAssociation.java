@@ -31,7 +31,7 @@ public class CIFAssociation {
 		associated_train_uid = record.substring(9, 15);
 		date_from = CIFUtils.convertDate(record.substring(15, 21));
 		date_to = CIFUtils.convertDate(record.substring(21, 27));
-		
+	
 		String runs = record.substring(27, 34);
 		category = record.substring(34, 36);
 		
