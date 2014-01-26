@@ -20,10 +20,14 @@
 package uk.co.swlines.cifreader;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream.GetField;
+import java.net.URL;
+import java.util.Arrays;
 
 import uk.co.swlines.cifreader.cif.CIFFileException;
 import uk.co.swlines.cifreader.cif.CIFProcessor;
@@ -37,15 +41,32 @@ public class CIFReader {
 				+ "welcome to redistribute it under certain conditions, see LICENCE.");
 		
 		CIFProcessor processor = new CIFProcessor();
-		try {
-			processor.processFile(!CIFReader.inDevelopmentEnviroment() ? "CFTCRSY.CIF" : "src/resources/CFTCRSY.CIF");
-			processor.process();
-		} catch (CIFFileException e) {
-			e.printStackTrace();
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		
+		for(String arg : args) {
+			File file = new File(arg);
+			
+			try {
+				if(file.exists()) {
+					if(file.isDirectory()) {
+						File[] fileList = file.listFiles();
+						Arrays.sort(fileList);
+						
+						for(File f : fileList) {
+							processor.processFile(f.getCanonicalPath());
+						}
+					}
+					else if(file.isFile()) {
+						processor.processFile(file.getCanonicalPath());
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (CIFFileException e) {
+				e.printStackTrace();
+			}
 		}
+		
+		processor.process();
 	}
 	
 	public static boolean inDevelopmentEnviroment() {

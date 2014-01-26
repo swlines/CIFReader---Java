@@ -122,4 +122,8 @@ public class CIFLocationIntermediate extends CIFLocation implements CIFLocationA
 	public int getAllowance_performance() {
 		return allowance_performance;
 	}
+	
+	public CIFLocationEnRouteChange getChangeRecord() {
+		return change_record;
+	}
 }

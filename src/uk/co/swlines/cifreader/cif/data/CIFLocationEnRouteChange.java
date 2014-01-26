@@ -63,4 +63,114 @@ public class CIFLocationEnRouteChange {
 		oc_y = operating_characteristics.contains("Y");
 		oc_z = operating_characteristics.contains("Z");
 	}
+
+	public String getCategory() {
+		return category;
+	}
+
+	public String getTrain_identity() {
+		return train_identity;
+	}
+
+	public String getHeadcode() {
+		return headcode;
+	}
+
+	public String getService_code() {
+		return service_code;
+	}
+
+	public String getPower_type() {
+		return power_type;
+	}
+
+	public String getTiming_load() {
+		return timing_load;
+	}
+
+	public String getSpeed() {
+		return speed;
+	}
+
+	public String getCatering_code() {
+		return catering_code;
+	}
+
+	public String getService_branding() {
+		return service_branding;
+	}
+
+	public String getUic() {
+		return uic;
+	}
+
+	public String getRsid() {
+		return rsid;
+	}
+
+	public boolean isOc_b() {
+		return oc_b;
+	}
+
+	public boolean isOc_c() {
+		return oc_c;
+	}
+
+	public boolean isOc_d() {
+		return oc_d;
+	}
+
+	public boolean isOc_e() {
+		return oc_e;
+	}
+
+	public boolean isOc_g() {
+		return oc_g;
+	}
+
+	public boolean isOc_m() {
+		return oc_m;
+	}
+
+	public boolean isOc_p() {
+		return oc_p;
+	}
+
+	public boolean isOc_q() {
+		return oc_q;
+	}
+
+	public boolean isOc_r() {
+		return oc_r;
+	}
+
+	public boolean isOc_s() {
+		return oc_s;
+	}
+
+	public boolean isOc_y() {
+		return oc_y;
+	}
+
+	public boolean isOc_z() {
+		return oc_z;
+	}
+
+	public char getPortion_id() {
+		return portion_id;
+	}
+
+	public char getTrain_class() {
+		return train_class;
+	}
+
+	public char getSleeper() {
+		return sleeper;
+	}
+
+	public char getReservations() {
+		return reservations;
+	}
+	
+	
 }

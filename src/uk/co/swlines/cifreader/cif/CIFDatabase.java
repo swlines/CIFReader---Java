@@ -32,6 +32,7 @@ import uk.co.swlines.cifreader.cif.data.CIFAssociation;
 import uk.co.swlines.cifreader.cif.data.CIFLocation;
 import uk.co.swlines.cifreader.cif.data.CIFLocationArrival;
 import uk.co.swlines.cifreader.cif.data.CIFLocationDepart;
+import uk.co.swlines.cifreader.cif.data.CIFLocationEnRouteChange;
 import uk.co.swlines.cifreader.cif.data.CIFLocationIntermediate;
 import uk.co.swlines.cifreader.cif.data.CIFLocationOrigin;
 import uk.co.swlines.cifreader.cif.data.CIFSchedule;
@@ -140,6 +141,7 @@ public class CIFDatabase extends DatabaseMySQL {
 		try {
 			PreparedStatement stmt = getConnection().prepareStatement("INSERT INTO tiplocs_t (tiploc, nalco, " +
 					"tps_description, stanox, crs, description) VALUES (?, ?, ?, ?, ?, ?);");
+						
 			stmt.setString(1, r.getTiploc());
 			stmt.setString(2, r.getNlc());
 			stmt.setString(3, r.getTps_description());
@@ -190,6 +192,8 @@ public class CIFDatabase extends DatabaseMySQL {
 	}
 
 	public void insertAssociationSTPCancellationsBulk(ArrayList<CIFAssociation> associationInsertCancellations) {
+		if(associationInsertCancellations.size() == 0) return;
+		
 		try {
 			PreparedStatement stmt = getConnection().prepareStatement(new StringBuilder("INSERT INTO associations_stpcancel_core_t (main_train_uid, " +
 					"assoc_train_uid, location, base_location_suffix, assoc_location_suffix, cancel_from, cancel_to, cancel_mo," +
@@ -281,8 +285,9 @@ public class CIFDatabase extends DatabaseMySQL {
 	
 	public void deleteSchedule(CIFSchedule r) {
 		try {
-			PreparedStatement stmt = getConnection().prepareStatement("DELETE FROM schedules_t WHERE " +
-					"train_uid = ? AND date_from = ? AND stp_indicator = ?");
+			PreparedStatement stmt = getConnection().prepareStatement("DELETE locations_t, schedules_t, locations_change_t "
+					+ "FROM schedules_t INNER JOIN locations_t ON schedules_t.id = locations_t.id LEFT JOIN locations_change_t "
+					+ "ON schedules_t.id = locations_change_t.schedule_id WHERE train_uid = ? AND date_from = ? AND stp_indicator = ?");
 			stmt.setString(1, r.getUid());
 			stmt.setString(2, r.getDate_from());
 			stmt.setString(3, String.valueOf(r.getStp_indicator()));
@@ -321,7 +326,6 @@ public class CIFDatabase extends DatabaseMySQL {
 	}
 	
 	public void insertScheduleBulk(ArrayList<CIFSchedule> r) throws LogicException {
-		
 		if(r.size() == 0) return;
 		
 		try {			
@@ -339,8 +343,15 @@ public class CIFDatabase extends DatabaseMySQL {
 					"act_ke, act_kf, act_ks, act_l, act_n, act_op, act_or, act_pr, act_r, act_rm, act_rr, act_s, act_t, act_minust, act_tb, " +
 					"act_tf, act_ts, act_tw, act_u, act_minusu, act_w, act_x) VALUES ");
 			
+			final StringBuilder locationsChange = new StringBuilder("INSERT INTO locations_change_t (schedule_id, location_id, category, "
+					+ "train_identity, headcode, service_code, portion_id, power_type, timing_load, speed, train_class, sleepers, "
+					+ "reservations, catering_code, service_branding, uic_code, rsid, oc_b, oc_c, oc_d, oc_e, oc_g, oc_m, oc_p, "
+					+ "oc_q, oc_r, oc_s, oc_y, oc_z) VALUES "+ createInsertPlaceholders(29));
+			
 			PreparedStatement stmtSchedules = getConnection().prepareStatement(schedulesStatement.append(createInsertPlaceholders(46)).
 					toString(), Statement.RETURN_GENERATED_KEYS);
+			
+			PreparedStatement stmtLocChange = getConnection().prepareStatement(locationsChange.toString());
 			
 			int locationTotal = 0;
 			
@@ -443,7 +454,7 @@ public class CIFDatabase extends DatabaseMySQL {
 					toString());
 			
 			for(CIFSchedule schedule : r) {
-				int locationOrder = 0;
+				int locationOrder = -1;
 				Integer originDeparture = null, originPublicDeparture = null;
 				
 				CIFLocation origin = schedule.getLocations().get(0);
@@ -456,7 +467,7 @@ public class CIFDatabase extends DatabaseMySQL {
 				
 				for(CIFLocation location : schedule.getLocations()) {
 					stmtLocations.setInt(parameterIndex++, schedule.getDatabaseId());
-					stmtLocations.setInt(parameterIndex++, locationOrder++);
+					stmtLocations.setInt(parameterIndex++, ++locationOrder);
 					stmtLocations.setString(parameterIndex++, location.getLocationType());
 					stmtLocations.setString(parameterIndex++, location.getTiploc());
 					stmtLocations.setString(parameterIndex++, String.valueOf(location.getTiploc_instance()).trim());
@@ -600,9 +611,68 @@ public class CIFDatabase extends DatabaseMySQL {
 					stmtLocations.setBoolean(parameterIndex++, location.isAc_u());
 					stmtLocations.setBoolean(parameterIndex++, location.isAc__u());
 					stmtLocations.setBoolean(parameterIndex++, location.isAc_w());
-					stmtLocations.setBoolean(parameterIndex++, location.isAc_x());		
+					stmtLocations.setBoolean(parameterIndex++, location.isAc_x());
+					
+					if(location instanceof CIFLocationIntermediate) {
+						CIFLocationEnRouteChange change = ((CIFLocationIntermediate) location).getChangeRecord();
+						
+						if(change != null) {
+							stmtLocChange.setInt(1, schedule.getDatabaseId());
+							stmtLocChange.setInt(2, locationOrder);
+							stmtLocChange.setString(3, change.getCategory());
+							stmtLocChange.setString(4, change.getTrain_identity());
+							stmtLocChange.setString(5, change.getHeadcode());
+							stmtLocChange.setString(6, change.getService_code());
+							
+							if(change.getPortion_id() != ' ')
+								stmtLocChange.setString(7, String.valueOf(change.getPortion_id()));
+							else
+								stmtLocChange.setNull(7, java.sql.Types.CHAR);
+							
+							stmtLocChange.setString(8, change.getPower_type());
+							stmtLocChange.setString(9, change.getTiming_load());
+							stmtLocChange.setString(10, change.getSpeed());
+							
+							if(change.getTrain_class() != ' ')
+								stmtLocChange.setString(11, String.valueOf(change.getTrain_class()));
+							else
+								stmtLocChange.setNull(11, java.sql.Types.CHAR);
+							
+							if(change.getSleeper() != ' ')
+								stmtLocChange.setString(12, String.valueOf(change.getSleeper()));
+							else
+								stmtLocChange.setNull(12, java.sql.Types.CHAR);
+							
+							if(change.getReservations() != ' ')
+								stmtLocChange.setString(13, String.valueOf(change.getReservations()));
+							else
+								stmtLocChange.setNull(13, java.sql.Types.CHAR);
+							
+							stmtLocChange.setString(14, change.getCatering_code());
+							stmtLocChange.setString(15, change.getService_branding());
+							stmtLocChange.setString(16, change.getUic());
+							stmtLocChange.setString(17, change.getRsid());
+							
+							stmtLocChange.setBoolean(18, change.isOc_b());
+							stmtLocChange.setBoolean(19, change.isOc_c());
+							stmtLocChange.setBoolean(20, change.isOc_d());
+							stmtLocChange.setBoolean(21, change.isOc_e());
+							stmtLocChange.setBoolean(22, change.isOc_g());
+							stmtLocChange.setBoolean(23, change.isOc_m());
+							stmtLocChange.setBoolean(24, change.isOc_p());
+							stmtLocChange.setBoolean(25, change.isOc_q());
+							stmtLocChange.setBoolean(26, change.isOc_r());
+							stmtLocChange.setBoolean(27, change.isOc_s());
+							stmtLocChange.setBoolean(28, change.isOc_y());
+							stmtLocChange.setBoolean(29, change.isOc_z());
+							
+							stmtLocChange.addBatch();
+						}
+					}
 				}
 			}
+			
+			stmtLocChange.executeBatch();
 			stmtLocations.execute();
 			stmtLocations.close();
 		} catch (SQLException e) {
@@ -610,6 +680,37 @@ public class CIFDatabase extends DatabaseMySQL {
 			e.printStackTrace();
 			System.exit(1);
 		}
+	}
+	
+	public void removeOld(String date) {
+		try {
+			PreparedStatement stmtSchedules = getConnection().prepareStatement("DELETE schedules_t, locations_t, locations_change_t "
+					+ "FROM schedules_t INNER JOIN locations_t ON schedules_t.id = locations_t.id LEFT JOIN locations_change_t ON "
+					+ "schedules_t.id = locations_change_t.schedule_id WHERE schedules_t.date_to < ?");
+			
+			PreparedStatement stmtAssociations = getConnection().prepareStatement("DELETE FROM associations_t WHERE date_to < ?");
+			PreparedStatement stmtAssocStpCan = getConnection().prepareStatement("DELETE FROM associations_stpcancel_core_t WHERE cancel_to < ?");
+			PreparedStatement stmtSchedStpCan = getConnection().prepareStatement("DELETE FROM schedules_stpcancel_core_t WHERE cancel_to < ?");
+			
+			stmtSchedules.setString(1, date);
+			stmtAssociations.setString(1, date);
+			stmtAssocStpCan.setString(1, date);
+			stmtSchedStpCan.setString(1, date);
+			
+			stmtSchedules.execute();
+			stmtAssociations.execute();
+			stmtAssocStpCan.execute();
+			stmtSchedStpCan.execute();
+			
+			stmtSchedules.close();
+			stmtAssociations.close();
+			stmtAssocStpCan.close();
+			stmtSchedStpCan.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
 	}
 	
 	private static String createInsertPlaceholders(int placeholders) {

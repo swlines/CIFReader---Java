@@ -19,18 +19,22 @@
 
 package uk.co.swlines.cifreader.cif.data;
 
+import uk.co.swlines.cifreader.cif.CIFUtils;
+
 public class CIFTiploc {
 	private String tiploc, nlc, tps_description, stanox, crs, description;
 	
 	public CIFTiploc(String record) {
-		if(record.substring(0, 2).equals("TI")) tiploc = record.substring(2, 9).trim();
-		else record.substring(72, 79).trim();
+		if(record.substring(0, 2).equals("TI") || record.substring(72, 79).trim().equals("")) 
+			tiploc = record.substring(2, 9).trim();
+		else 
+			tiploc = record.substring(72, 79).trim();
 		
 		nlc = record.substring(11, 17).trim();
-		tps_description = record.substring(18, 44).trim();
+		tps_description = CIFUtils.capitaliseString(record.substring(18, 44).trim());
 		stanox = record.substring(44, 49).trim();
 		crs = record.substring(53, 56).trim();
-		description = record.substring(56, 72).trim();
+		description = CIFUtils.capitaliseString(record.substring(56, 72).trim());
 	}
 
 	public String getTiploc() {

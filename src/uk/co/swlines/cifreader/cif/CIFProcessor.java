@@ -46,6 +46,8 @@ public class CIFProcessor {
 	private List<String> filePaths = null;
 	boolean fullExtractToLoad = false;
 	
+	boolean withinFullExtract = false;
+	
 	public CIFProcessor() {
 		
 	}
@@ -110,6 +112,7 @@ public class CIFProcessor {
 			}
 			
 			try {
+				System.out.println("INFO: Completing timetable update transactions");
 				database.finalise();
 			} catch (SQLException e) {
 				// TODO Auto-generated catch block
@@ -132,6 +135,8 @@ public class CIFProcessor {
 			e.printStackTrace();
 			return;
 		}
+		
+		System.out.print("\n\n");
 		
 		String line = null;
 		CIFHeader header = null;
@@ -160,7 +165,7 @@ public class CIFProcessor {
 							"===========================================================\n");
 			
 			if(header.isFullExtract()) {
-				System.out.println("Full Extract: Disabling keys");
+				System.out.println("INFO: Full extract - disabling keys\n");
 				try {
 					database.disableKeys();
 				} catch (SQLException e) {
@@ -169,7 +174,7 @@ public class CIFProcessor {
 				}
 			}
 			
-			
+			withinFullExtract = header.isFullExtract();
 			
 			CIFLocationEnRouteChange location_change = null;
 			
@@ -282,7 +287,7 @@ public class CIFProcessor {
 			processSchedules();
 			
 			if(header.isFullExtract()) {
-				System.out.println("\nFull Extract: Enabling keys");
+				System.out.println("\n\nINFO: Full extract - enabling keys");
 				try {
 					database.enableKeys();
 				} catch (SQLException e) {
@@ -290,6 +295,11 @@ public class CIFProcessor {
 					return;
 				}
 			}
+			else {
+				System.out.println("\n\nINFO: Clearing old data");
+				database.removeOld(header.getUser_extract_start_date());
+				System.out.println("INFO: Completed old data");
+			}	
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -312,6 +322,7 @@ public class CIFProcessor {
 		
 		for(CIFAssociation a : associationsInsert) {
 			if(a.getStp_indicator() == 'C') {
+				if(!withinFullExtract) database.deleteAssociationSTPCancellation(a);
 				associationInsertCancellations.add(a);
 			}
 			else {
@@ -341,6 +352,7 @@ public class CIFProcessor {
 		
 		for(CIFSchedule s : schedulesInsert) {
 			if(s.getStp_indicator() == 'C') {
+				if(!withinFullExtract) database.deleteScheduleSTPCancellation(s);
 				database.scheduleInsertSTPCancellation(s);
 			}
 			else {
