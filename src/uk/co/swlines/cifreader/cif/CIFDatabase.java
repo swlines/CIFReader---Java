@@ -381,7 +381,11 @@ public class CIFDatabase extends DatabaseMySQL {
 				stmtSchedules.setString(parameterIndex++, schedule.getCategory());
 				stmtSchedules.setString(parameterIndex++, schedule.getTrain_identity());
 				stmtSchedules.setString(parameterIndex++, schedule.getHeadcode());
-				stmtSchedules.setInt(parameterIndex++, schedule.getService_code());
+				
+				if (schedule.getService_code() != null) 
+					stmtSchedules.setInt(parameterIndex++, schedule.getService_code());
+				else
+					stmtSchedules.setNull(parameterIndex++, java.sql.Types.INTEGER);
 				
 				if(schedule.getPortion_id() != ' ')
 					stmtSchedules.setString(parameterIndex++, String.valueOf(schedule.getPortion_id()));

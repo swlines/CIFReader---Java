@@ -187,7 +187,7 @@ public class CIFSchedule {
 		return headcode;
 	}
 
-	public int getService_code() {
+	public Integer getService_code() {
 		return service_code;
 	}
 
